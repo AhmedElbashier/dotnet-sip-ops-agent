@@ -1,0 +1,62 @@
+$ dotnet test -c Release
+Passed!  - Failed: 0, Passed: 36, Skipped: 0, Total: 36
+
+$ curl -sS http://localhost:8080/health/ready | jq
+{
+  "status": "ready",
+  "records": 48,
+  "provider": "scripted",
+  "model": "scripted-planner"
+}
+
+$ curl -sS http://localhost:8080/api/calls/cdr-20261124-0042 | jq
+{
+  "callId": "cdr-20261124-0042",
+  "sipCallId": "8f3c1a2b-42@fs-01.sip-ops.example",
+  "startedAt": "2026-11-24T06:12:00+00:00",
+  "answeredAt": "2026-11-24T06:12:04+00:00",
+  "endedAt": "2026-11-24T06:15:11+00:00",
+  "direction": "Inbound",
+  "caller": "+971500100042",
+  "callee": "+971400100100",
+  "trunk": "trunk-du-primary",
+  "disposition": "Answered",
+  "sipCode": 200,
+  "hangupCause": "NORMAL_CLEARING",
+  "durationSeconds": 187,
+  "mos": 4.2,
+  "packetLossPercent": 0.2
+}
+
+$ ./scripts/ask.sh 'Why did calls fail on trunk-du-backup this morning?'
+provider: scripted  model: scripted-planner  turns: 2
+tools: search_call_logs -> summarize_failures -> final answer
+--- answer ---
+Scripted provider (not an LLM). Findings from tool results:
+
+Search returned 13 call(s) (trunk=trunk-du-backup, disposition=Failed).
+
+Summary: 13 matched (answered 0, failed 13, busy 0, no-answer 0, cancelled 0), grouped by sip_code: 12 x 503, 1 x 408.
+
+$ ./scripts/ask.sh 'Find all 486 busy calls and post a warning webhook.'
+provider: scripted  turns: 3
+tools: search_call_logs -> summarize_failures -> post_webhook -> final answer
+--- answer ---
+Scripted provider (not an LLM). Findings from tool results:
+
+Search returned 5 call(s) (sipCode=486, disposition=Busy).
+
+Summary: 5 matched (answered 0, failed 0, busy 5, no-answer 0, cancelled 0), grouped by sip_code: 5 x 486.
+
+Webhook wh-1795549226056-6246 (warning): dry run (no URL configured). SIP ops alert
+
+$ ./scripts/ask.sh 'Get details for cdr-20261124-0042'
+provider: scripted  turns: 2
+tools: get_call -> final answer
+--- answer ---
+Scripted provider (not an LLM). Findings from tool results:
+
+Call cdr-20261124-0042: Inbound Answered SIP 200 / NORMAL_CLEARING on trunk-du-primary, caller +971500100042 -> +971400100100, duration 187s, MOS 4.2, loss 0.2%.
+
+Looked up call cdr-20261124-0042.
+

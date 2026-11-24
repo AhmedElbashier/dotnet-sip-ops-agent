@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet restore
+      - run: dotnet build --no-restore -c Release -warnaserror
+      - run: dotnet test --no-build -c Release --logger "trx;LogFileName=results.trx"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: "**/TestResults/*.trx"
+
+  docker-smoke:
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t sip-ops-agent .
+      - name: Run container and exercise scripted agent
+        run: |
+          docker run -d --name agent -p 8080:8080 \
+            -e Llm__Provider=scripted \
+            -e Agent__EnableDevSink=true \
+            -e Webhook__Url=http://127.0.0.1:8080/api/dev/webhook-sink \
+            -e Webhook__HmacSecret=ci-secret \
+            sip-ops-agent
+          for i in $(seq 1 30); do curl -fsS localhost:8080/health/ready && break; sleep 1; done
+          curl -fsS localhost:8080/health/live
+          curl -fsS "localhost:8080/api/calls?sipCode=503&trunk=trunk-du-backup" | tee calls.json
+          grep -q 'cdr-20261124-0001' calls.json
+          curl -fsS localhost:8080/api/calls/cdr-20261124-0042 | tee featured.json
+          grep -q '"mos":4.2' featured.json
+          curl -fsS -X POST localhost:8080/api/agent/ask \
+            -H 'Content-Type: application/json' \
+            -d '{"question":"Why did calls fail on trunk-du-backup this morning? Post a critical webhook."}' \
+            | tee ask.json
+          grep -q 'trunk-du-backup' ask.json
+          grep -q '503' ask.json
+          grep -q 'post_webhook' ask.json
+          curl -fsS localhost:8080/api/dev/webhook-sink | tee sink.json
+          grep -q 'SIP ops alert' sink.json
+      - if: always()
+        run: docker logs agent

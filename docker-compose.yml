@@ -1,0 +1,15 @@
+services:
+  sip-ops-agent:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      Llm__Provider: scripted
+      Agent__EnableDevSink: "true"
+      Webhook__Url: http://127.0.0.1:8080/api/dev/webhook-sink
+      Webhook__HmacSecret: dev-demo-secret
+    # To use a real OpenAI-compatible API (Ollama, OpenAI, Azure, LM Studio):
+    #   Llm__Provider: openai
+    #   Llm__BaseUrl: http://host.docker.internal:11434/v1
+    #   Llm__Model: llama3.1
+    #   Llm__ApiKey: ""          # required for OpenAI / Azure, unused by Ollama
